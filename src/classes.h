@@ -73,7 +73,7 @@ struct Vector3 {
 
 template<typename T>
 class ActorRef {
-  private:
+  public:
     T *m_object;
 
   public:
@@ -338,7 +338,7 @@ class Actor : public IActor {
     uint32_t m_id;
     IUE4Actor *m_target;
     TimerSet *m_timers;
-    std::string m_blueprintName;
+    char *m_blueprintName;
     ActorRef<IActor> m_owner;
     int32_t m_health;
     std::map<std::basic_string<char>, bool, std::less<std::basic_string<char> >, std::allocator<std::pair<std::basic_string<char> const, bool> > > m_states;
@@ -433,7 +433,7 @@ class Actor : public IActor {
 };
 
 class WriteStream {
-  private:
+  public:
     class Socket *m_sock;
     std::vector<unsigned char> m_buffer;
 
@@ -459,7 +459,7 @@ class WriteStream {
 };
 
 class Player : public Actor, public IPlayer {
-  private:
+  public:
     uint32_t m_characterId;
     std::string m_playerName;
     std::string m_teamName;
@@ -654,7 +654,7 @@ class Player : public Actor, public IPlayer {
 };
 
 class NPC : public Actor {
-  private:
+  public:
     std::map<std::string, NPCState, std::less<std::string>, std::allocator<std::pair<std::string const, NPCState> > > m_states;
 
   public:
@@ -677,7 +677,7 @@ class NPC : public Actor {
 class AIZone;
 
 class AIZoneListener {
-  private:
+  public:
     AIZone *m_zone;
 
   public:
@@ -690,7 +690,7 @@ class AIZoneListener {
 };
 
 class AIZone {
-  private:
+  public:
     std::string m_name;
     size_t m_playerCount;
     std::set<AIZoneListener*, std::less<AIZoneListener*>, std::allocator<AIZoneListener*> > m_listeners;
@@ -727,7 +727,7 @@ class Spawner : public AIZoneListener {
 
 class TimerSet {
   struct TimerEvent;
-  private:
+  public:
     std::map<std::string, TimerSet::TimerEvent, std::less<std::string>, std::allocator<std::pair<std::string const, TimerSet::TimerEvent> > > m_timers;
 
   public:
@@ -738,4 +738,198 @@ class TimerSet {
     void Cancel(const std::string &);
     void Clear();
     void Tick(Actor *, float);
+};
+
+class Projectile : public Actor {
+  protected:
+    IItem *m_item;
+    float m_lifetime;
+
+  public:
+    Projectile(IActor *, IItem *, const std::string &);
+    virtual bool ShouldSendPositionUpdates();
+    virtual bool IsProjectile();
+    virtual int32_t GetDirectDamage();
+    virtual enum DamageType GetDamageType();
+    virtual bool HasSplashDamage();
+    virtual float GetSplashRadius();
+    virtual int32_t GetSplashDamage();
+    virtual bool DamagesOnHit();
+    IItem * GetItem() const;
+    virtual void OnHit(IActor *, const struct Vector3 &, const struct Vector3 &);
+    void DealDamage(IActor *);
+    virtual void Tick(float);
+    virtual void OnLifetimeEnded();
+    static bool SpawnProjectile(IActor *, Projectile *);
+};
+
+class World {
+  protected:
+    std::set<ActorRef<IPlayer>, std::less<ActorRef<IPlayer> >, std::allocator<ActorRef<IPlayer> > > m_players;
+    std::set<ActorRef<IActor>, std::less<ActorRef<IActor> >, std::allocator<ActorRef<IActor> > > m_actors;
+    
+    std::map<unsigned int, ActorRef<IActor>, std::less<unsigned int>, std::allocator<std::pair<unsigned int const, ActorRef<IActor> > > > m_actorsById;
+    ILocalPlayer *m_localPlayer;
+    uint32_t m_nextId;
+    std::map<std::string, AIZone*, std::less<std::string>, std::allocator<std::pair<std::string const, AIZone*> > > m_aiZones;
+
+    void AddActorToWorld(Actor *);
+    void AddActorToWorldWithId(uint32_t, Actor *);
+    void SendEventToAllPlayers(const WriteStream &);
+    void SendEventToAllPlayersExcept(Player *, const WriteStream &);
+  public:
+    World();
+    virtual ~World();
+    virtual void Tick(float);
+    virtual bool HasLocalPlayer();
+    ILocalPlayer * GetLocalPlayer();
+    virtual bool IsAuthority();
+    virtual void AddLocalPlayer(Player *, ILocalPlayer *);
+    virtual void AddRemotePlayer(Player *);
+    virtual void AddRemotePlayerWithId(uint32_t, Player *);
+    virtual void RemovePlayer(Player *);
+    virtual void Use(Player *, Actor *);
+    virtual void Activate(Player *, IItem *);
+    virtual void Reload(Player *);
+    virtual void Jump(bool);
+    virtual void Sprint(bool);
+    virtual void FireRequest(bool);
+    virtual void TransitionToNPCState(Player *, const std::string &);
+    virtual void BuyItem(Player *, Actor *, IItem *, uint32_t);
+    virtual void SellItem(Player *, Actor *, IItem *, uint32_t);
+    virtual void Respawn(Player *);
+    virtual void Teleport(Player *, const std::string &);
+    virtual void Chat(Player *, const std::string &);
+    virtual void FastTravel(Player *, const std::string &, const std::string &);
+    virtual void SetPvPDesired(Player *, bool);
+    virtual void SubmitDLCKey(Player *, const std::string &);
+    virtual void SetCircuitInputs(Player *, const std::string &, uint32_t);
+    virtual void SendAddItemEvent(Player *, IItem *, uint32_t);
+    virtual void SendRemoveItemEvent(Player *, IItem *, uint32_t);
+    virtual void SendLoadedAmmoEvent(Player *, IItem *, uint32_t);
+    virtual void SendPickedUpEvent(Player *, const std::string &);
+    virtual void EquipItem(Player *, uint8_t, IItem *);
+    virtual void SetCurrentSlot(Player *, uint8_t);
+    virtual void SendEquipItemEvent(Player *, uint8_t, IItem *);
+    virtual void SendCurrentSlotEvent(Player *, uint8_t);
+    virtual void SetCurrentQuest(Player *, IQuest *);
+    virtual void SendSetCurrentQuestEvent(Player *, IQuest *);
+    virtual void SendStartQuestEvent(Player *, IQuest *);
+    virtual void SendAdvanceQuestToStateEvent(Player *, IQuest *, IQuestState *);
+    virtual void SendCompleteQuestEvent(Player *, IQuest *);
+    virtual void SendHealthUpdateEvent(Actor *, int32_t);
+    virtual void SendManaUpdateEvent(Player *, int32_t);
+    virtual void SendCountdownUpdateEvent(Player *, int32_t);
+    virtual void SendPvPCountdownUpdateEvent(Player *, bool, int32_t);
+    virtual void SendPvPEnableEvent(Player *, bool);
+    virtual void SendStateEvent(Actor *, const std::string &, bool);
+    virtual void SendTriggerEvent(Actor *, const std::string &, Actor *, bool);
+    virtual void SendFireBulletsEvent(Actor *, IItem *, const struct Vector3 &, uint32_t, float);
+    virtual void SendDisplayEvent(Player *, const std::string &, const std::string &);
+    virtual void SendNPCConversationStateEvent(Player *, Actor *, const std::string &);
+    virtual void SendNPCConversationEndEvent(Player *);
+    virtual void SendNPCShopEvent(Player *, Actor *);
+    virtual void SendRespawnEvent(Player *, const struct Vector3 &, const struct Rotation &);
+    virtual void SendTeleportEvent(Actor *, const struct Vector3 &, const struct Rotation &);
+    virtual void SendRelativeTeleportEvent(Actor *, const struct Vector3 &);
+    virtual void SendReloadEvent(Player *, IItem *, IItem *, uint32_t);
+    virtual void SendPlayerJoinedEvent(Player *);
+    virtual void SendPlayerLeftEvent(Player *);
+    virtual void SendPlayerItemEvent(Player *);
+    virtual void SendActorSpawnEvent(Actor *);
+    virtual void SendActorDestroyEvent(Actor *);
+    virtual void SendExistingPlayerEvent(Player *, Player *);
+    virtual void SendExistingActorEvent(Player *, Actor *);
+    virtual void SendChatEvent(Player *, const std::string &);
+    virtual void SendKillEvent(Player *, Actor *, IItem *);
+    virtual void SendCircuitOutputEvent(Player *, const std::string &, uint32_t, const std::vector<std::allocator<bool>> &);
+    virtual void SendActorPositionEvents(Player *);
+    virtual void SendRegionChangeEvent(Player *, const std::string &);
+    virtual void SendLastHitByItemEvent(Player *, IItem *);
+    bool SpawnActor(Actor *, const struct Vector3 &, const struct Rotation &);
+    bool SpawnActorAtNamedLocation(Actor *, const char *);
+    void SpawnActorWithId(uint32_t, Actor *, const struct Vector3 &, const struct Rotation &);
+    void DestroyActor(Actor *);
+    void SendSpawnEventsForExistingActors(Player *);
+    void AddAIZone(AIZone *);
+    AIZone * GetAIZone(const std::string &);
+    void OnPlayerEnteredAIZone(const std::string &);
+    void OnPlayerLeftAIZone(const std::string &);
+    std::vector<IPlayer*, std::allocator<IPlayer*> > GetPlayersInRadius(const struct Vector3 &, float);
+    std::vector<Projectile*, std::allocator<Projectile*> > GetProjectilesInRadius(const struct Vector3 &, float);
+    Actor * GetActorById(uint32_t);
+    void RemoveAllActorsExceptPlayer(Player *);
+    void ChangeActorId(Player *, uint32_t);
+    bool IsPlayerAlreadyConnected(uint32_t);
+};
+
+class ClientWorld : public World {
+  public:
+    ActorRef<IPlayer> m_activePlayer;
+    float m_timeUntilNextNetTick;
+
+  public:
+    ClientWorld();
+    virtual bool HasLocalPlayer();
+    virtual bool IsAuthority();
+    virtual void AddLocalPlayer(Player *, ILocalPlayer *);
+    virtual void Tick(float);
+    virtual void Use(Player *, Actor *);
+    virtual void Activate(Player *, IItem *);
+    virtual void Reload(Player *);
+    virtual void Jump(bool);
+    virtual void Sprint(bool);
+    virtual void FireRequest(bool);
+    virtual void TransitionToNPCState(Player *, const std::string &);
+    virtual void BuyItem(Player *, Actor *, IItem *, uint32_t);
+    virtual void SellItem(Player *, Actor *, IItem *, uint32_t);
+    virtual void Respawn(Player *);
+    virtual void Teleport(Player *, const std::string &);
+    virtual void Chat(Player *, const std::string &);
+    virtual void FastTravel(Player *, const std::string &, const std::string &);
+    virtual void SetPvPDesired(Player *, bool);
+    virtual void SubmitDLCKey(Player *, const std::string &);
+    virtual void SetCircuitInputs(Player *, const std::string &, uint32_t);
+    virtual void SendAddItemEvent(Player *, IItem *, uint32_t);
+    virtual void SendRemoveItemEvent(Player *, IItem *, uint32_t);
+    virtual void SendLoadedAmmoEvent(Player *, IItem *, uint32_t);
+    virtual void SendPickedUpEvent(Player *, const std::string &);
+    virtual void EquipItem(Player *, uint8_t, IItem *);
+    virtual void SetCurrentSlot(Player *, uint8_t);
+    virtual void SendEquipItemEvent(Player *, uint8_t, IItem *);
+    virtual void SendCurrentSlotEvent(Player *, uint8_t);
+    virtual void SetCurrentQuest(Player *, IQuest *);
+    virtual void SendSetCurrentQuestEvent(Player *, IQuest *);
+    virtual void SendStartQuestEvent(Player *, IQuest *);
+    virtual void SendAdvanceQuestToStateEvent(Player *, IQuest *, IQuestState *);
+    virtual void SendCompleteQuestEvent(Player *, IQuest *);
+    virtual void SendHealthUpdateEvent(Actor *, int32_t);
+    virtual void SendManaUpdateEvent(Player *, int32_t);
+    virtual void SendCountdownUpdateEvent(Player *, int32_t);
+    virtual void SendPvPCountdownUpdateEvent(Player *, bool, int32_t);
+    virtual void SendPvPEnableEvent(Player *, bool);
+    virtual void SendStateEvent(Actor *, const std::string &, bool);
+    virtual void SendTriggerEvent(Actor *, const std::string &, Actor *, bool);
+    virtual void SendFireBulletsEvent(Actor *, IItem *, const struct Vector3 &, uint32_t, float);
+    virtual void SendDisplayEvent(Player *, const std::string &, const std::string &);
+    virtual void SendNPCConversationStateEvent(Player *, Actor *, const std::string &);
+    virtual void SendNPCConversationEndEvent(Player *);
+    virtual void SendNPCShopEvent(Player *, Actor *);
+    virtual void SendRespawnEvent(Player *, const struct Vector3 &, const struct Rotation &);
+    virtual void SendTeleportEvent(Actor *, const struct Vector3 &, const struct Rotation &);
+    virtual void SendRelativeTeleportEvent(Actor *, const struct Vector3 &);
+    virtual void SendReloadEvent(Player *, IItem *, IItem *, uint32_t);
+    virtual void SendPlayerJoinedEvent(Player *);
+    virtual void SendPlayerLeftEvent(Player *);
+    virtual void SendPlayerItemEvent(Player *);
+    virtual void SendActorSpawnEvent(Actor *);
+    virtual void SendActorDestroyEvent(Actor *);
+    virtual void SendExistingPlayerEvent(Player *, Player *);
+    virtual void SendExistingActorEvent(Player *, Actor *);
+    virtual void SendChatEvent(Player *, const std::string &);
+    virtual void SendKillEvent(Player *, Actor *, IItem *);
+    virtual void SendCircuitOutputEvent(Player *, const std::string &, uint32_t, const std::vector<std::allocator<bool>> &);
+    virtual void SendActorPositionEvents(Player *);
+    virtual void SendRegionChangeEvent(Player *, const std::string &);
+    virtual void SendLastHitByItemEvent(Player *, IItem *);
 };
