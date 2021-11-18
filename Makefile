@@ -1,3 +1,3 @@
 all:
-	g++ src/*.cpp -o libHack.so -shared
+	g++ src/*.cpp -o libHack.so -shared -fPIC
 
